@@ -63,12 +63,11 @@ export function Cropper({ image, onCropComplete }: CropperProps) {
         <p className="text-zinc-500 text-sm">Select the area containing your icon grid</p>
       </div>
 
-      <div className="relative bento-card p-4 overflow-hidden max-h-[70vh]">
+      <div className="relative bento-card p-4 max-h-[70vh]">
         <ReactCrop
           crop={crop}
           onChange={(c) => setCrop(c)}
           onComplete={(c) => setCompletedCrop(c)}
-          className="max-h-full"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -76,7 +75,7 @@ export function Cropper({ image, onCropComplete }: CropperProps) {
             src={image.src}
             alt="Original"
             onLoad={onImageLoad}
-            className="max-h-[60vh] w-auto object-contain"
+            className="max-h-[60vh] w-auto block"
           />
         </ReactCrop>
       </div>
