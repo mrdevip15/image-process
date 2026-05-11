@@ -8,14 +8,14 @@ export interface SliceRegion {
 
 export async function sliceImage(
   image: HTMLImageElement,
-  vLines: number[], // sorted x-coordinates (0 to width)
-  hLines: number[]  // sorted y-coordinates (0 to height)
+  vLines: number[], // pixel x-coordinates (0 to naturalWidth)
+  hLines: number[]  // pixel y-coordinates (0 to naturalHeight)
 ): Promise<{ blob: Blob; filename: string }[]> {
   const slices: { blob: Blob; filename: string }[] = [];
   
-  // Ensure lines include boundaries
-  const xPoints = [0, ...vLines.sort((a, b) => a - b), image.width];
-  const yPoints = [0, ...hLines.sort((a, b) => a - b), image.height];
+  // Ensure lines include boundaries and are sorted
+  const xPoints = Array.from(new Set([0, ...vLines, image.naturalWidth])).sort((a, b) => a - b);
+  const yPoints = Array.from(new Set([0, ...hLines, image.naturalHeight])).sort((a, b) => a - b);
   
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
@@ -25,10 +25,10 @@ export async function sliceImage(
   let count = 1;
   for (let i = 0; i < yPoints.length - 1; i++) {
     for (let j = 0; j < xPoints.length - 1; j++) {
-      const x = xPoints[j];
-      const y = yPoints[i];
-      const width = xPoints[j + 1] - x;
-      const height = yPoints[i + 1] - y;
+      const x = Math.round(xPoints[j]);
+      const y = Math.round(yPoints[i]);
+      const width = Math.round(xPoints[j + 1] - x);
+      const height = Math.round(yPoints[i + 1] - y);
 
       // Skip invalid dimensions
       if (width <= 0 || height <= 0) continue;
