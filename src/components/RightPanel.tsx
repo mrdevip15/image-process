@@ -22,6 +22,7 @@ import {
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { ActiveTool, ImageEdits, hasVisualEdits } from "@/lib/imageEdits";
+import { SelectionMode } from "@/lib/selection";
 
 interface RightPanelProps {
   mode: "UPLOAD" | "CROP" | "SLICE";
@@ -46,6 +47,13 @@ interface RightPanelProps {
   isRemovingBackground: boolean;
   hasBackgroundRemovedImage: boolean;
   onDownloadEditedImage: () => void;
+  selectionMode: SelectionMode;
+  onSelectionModeChange: (mode: SelectionMode) => void;
+  smartTolerance: number;
+  onSmartToleranceChange: (value: number) => void;
+  hasSelection: boolean;
+  onApplySelectionMask: () => void;
+  onClearSelection: () => void;
 }
 
 interface SliderControlProps {
@@ -108,7 +116,14 @@ export function RightPanel({
   onApplyBackgroundRemoval,
   isRemovingBackground,
   hasBackgroundRemovedImage,
-  onDownloadEditedImage
+  onDownloadEditedImage,
+  selectionMode,
+  onSelectionModeChange,
+  smartTolerance,
+  onSmartToleranceChange,
+  hasSelection,
+  onApplySelectionMask,
+  onClearSelection,
 }: RightPanelProps) {
   const [gridConfig, setGridConfig] = useState({ rows: 4, cols: 4 });
 
@@ -278,6 +293,74 @@ export function RightPanel({
                     {imageEdits.removeBackground ? "Hide Removed Background" : "Show Removed Background"}
                   </button>
                 )}
+              </div>
+            )}
+
+            {activeTool === "LASSO" && (
+              <div className="space-y-5">
+                <GridIconLabel icon={<Sparkle size={14} />} label="Lasso Selection" />
+                <p className="text-xs text-zinc-400 leading-relaxed bg-zinc-950 p-3 rounded border border-zinc-800">
+                  Select the part to keep, then apply it as a transparent mask. Smart picks a connected area by color; Manual drags freely; Pen places precise points.
+                </p>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    ["smart", "Smart"],
+                    ["freehand", "Manual"],
+                    ["pen", "Pen"],
+                  ] as const).map(([modeKey, label]) => (
+                    <button
+                      key={modeKey}
+                      onClick={() => onSelectionModeChange(modeKey)}
+                      className={cn(
+                        "rounded border py-2 text-[10px] font-bold uppercase tracking-wider transition-colors",
+                        selectionMode === modeKey
+                          ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
+                          : "border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {selectionMode === "smart" && (
+                  <SliderControl
+                    label="Tolerance"
+                    value={smartTolerance}
+                    min={8}
+                    max={120}
+                    onChange={onSmartToleranceChange}
+                  />
+                )}
+
+                <div className="space-y-2 text-[11px] text-zinc-500 leading-relaxed">
+                  {selectionMode === "smart" && <p>Click an area on the image to select similar connected pixels.</p>}
+                  {selectionMode === "freehand" && <p>Drag around the subject; release to close the lasso.</p>}
+                  {selectionMode === "pen" && <p>Click to add points. Double-click or click near the first point to close.</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={onApplySelectionMask}
+                    disabled={!hasSelection || isProcessing}
+                    className={cn(
+                      "py-2 rounded text-[11px] font-bold transition-colors",
+                      hasSelection && !isProcessing
+                        ? "bg-emerald-600 text-white hover:bg-emerald-500"
+                        : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                    )}
+                  >
+                    Apply Mask
+                  </button>
+                  <button
+                    onClick={onClearSelection}
+                    disabled={!hasSelection}
+                    className="py-2 rounded border border-zinc-800 text-[11px] font-bold text-zinc-400 transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
             )}
 

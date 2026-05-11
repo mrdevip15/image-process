@@ -1,4 +1,4 @@
-export type ActiveTool = "GRID" | "BACKGROUND" | "HUE" | "EFFECTS";
+export type ActiveTool = "GRID" | "BACKGROUND" | "LASSO" | "HUE" | "EFFECTS";
 
 export interface ImageEdits {
   hue: number;

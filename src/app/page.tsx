@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Dropzone } from "@/components/Dropzone";
 import { Workspace } from "@/components/Workspace";
 import { RightPanel } from "@/components/RightPanel";
@@ -17,6 +17,15 @@ import {
   loadImageFromSrc,
   renderEditedCanvas,
 } from "@/lib/imageEdits";
+import {
+  ImageSelection,
+  SelectionMode,
+  SelectionPoint,
+  applySelectionMaskToImage,
+  createSmartSelection,
+  defaultSelectionMode,
+  defaultSmartTolerance,
+} from "@/lib/selection";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { motion, AnimatePresence } from "framer-motion";
@@ -43,6 +52,9 @@ interface EditorSnapshot {
   hLines: number[];
   imageEdits: ImageEdits;
   backgroundRemovedSrc?: string;
+  selection?: ImageSelection;
+  selectionMode: SelectionMode;
+  smartTolerance: number;
 }
 
 interface ToolButtonProps {
@@ -73,6 +85,22 @@ function ToolButton({ label, active, disabled, onClick, children }: ToolButtonPr
   );
 }
 
+function LassoIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M5.5 6.5C8.25 3.9 15.5 3.7 18.2 7.3c2.4 3.2.2 8.1-4.4 9.3-3.6.9-8.6-.2-9.5-3.4-.5-1.8.7-3.4 2.9-4.1"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray={active ? "0" : "2.4 2.4"}
+      />
+      <path d="M12 16.5l-2.2 4.2 4.4-1.7 4 2-2-4.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function Home() {
   const [appMode, setAppMode] = useState<AppMode>("UPLOAD");
   const [originalImage, setOriginalImage] = useState<HTMLImageElement | null>(null);
@@ -84,6 +112,9 @@ export default function Home() {
   const [imageEdits, setImageEdits] = useState<ImageEdits>(defaultImageEdits);
   const [backgroundRemovedSrc, setBackgroundRemovedSrc] = useState<string | undefined>();
   const [isRemovingBackground, setIsRemovingBackground] = useState(false);
+  const [selection, setSelection] = useState<ImageSelection | undefined>();
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>(defaultSelectionMode);
+  const [smartTolerance, setSmartTolerance] = useState(defaultSmartTolerance);
   const [undoStack, setUndoStack] = useState<EditorSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<EditorSnapshot[]>([]);
   
@@ -122,7 +153,10 @@ export default function Home() {
     hLines: [...hLines],
     imageEdits: { ...imageEdits },
     backgroundRemovedSrc,
-  }), [backgroundRemovedSrc, hLines, imageEdits, vLines]);
+    selection: selection ? { ...selection, points: [...selection.points] } : undefined,
+    selectionMode,
+    smartTolerance,
+  }), [backgroundRemovedSrc, hLines, imageEdits, selection, selectionMode, smartTolerance, vLines]);
 
   const rememberCurrentState = useCallback(() => {
     const snapshot = createSnapshot();
@@ -135,6 +169,9 @@ export default function Home() {
     setHLines(snapshot.hLines);
     setImageEdits(snapshot.imageEdits);
     setBackgroundRemovedSrc(snapshot.backgroundRemovedSrc);
+    setSelection(snapshot.selection);
+    setSelectionMode(snapshot.selectionMode);
+    setSmartTolerance(snapshot.smartTolerance);
   };
 
   const handleUndo = () => {
@@ -158,6 +195,9 @@ export default function Home() {
     setImage(null);
     setImageEdits(defaultImageEdits);
     setBackgroundRemovedSrc(undefined);
+    setSelection(undefined);
+    setSelectionMode(defaultSelectionMode);
+    setSmartTolerance(defaultSmartTolerance);
     setUndoStack([]);
     setRedoStack([]);
     setActiveTool("GRID");
@@ -199,6 +239,7 @@ export default function Home() {
       setImage(croppedImg);
       setAppMode("SLICE");
       setActiveTool("GRID");
+      setSelection(undefined);
       setZoom(calculateFitZoom(croppedImg));
       generateGrid(4, 4, false);
     };
@@ -270,6 +311,9 @@ export default function Home() {
     setActiveTool("GRID");
     setImageEdits(defaultImageEdits);
     setBackgroundRemovedSrc(undefined);
+    setSelection(undefined);
+    setSelectionMode(defaultSelectionMode);
+    setSmartTolerance(defaultSmartTolerance);
     setUndoStack([]);
     setRedoStack([]);
   };
@@ -283,6 +327,18 @@ export default function Home() {
     rememberCurrentState();
     setImageEdits(defaultImageEdits);
     setBackgroundRemovedSrc(undefined);
+    setSelection(undefined);
+  };
+
+  const updateSelectionMode = (mode: SelectionMode) => {
+    setSelectionMode(mode);
+    setSelection(undefined);
+  };
+
+  const clearSelection = () => {
+    if (!selection) return;
+    rememberCurrentState();
+    setSelection(undefined);
   };
 
   const getCurrentImageSource = async () => {
@@ -327,6 +383,47 @@ export default function Home() {
     }
   };
 
+  const handleSmartSelect = async (point: SelectionPoint) => {
+    if (!image) return;
+    try {
+      const nextSelection = await createSmartSelection(
+        backgroundPreviewSrc || image.src,
+        point,
+        image.naturalWidth,
+        image.naturalHeight,
+        smartTolerance
+      );
+      rememberCurrentState();
+      setSelection(nextSelection);
+    } catch (error) {
+      console.error("Smart lasso failed:", error);
+      alert("Smart lasso could not read this image.");
+    }
+  };
+
+  const applySelectionAsMask = async () => {
+    if (!image || !selection || !selection.closed) return;
+    rememberCurrentState();
+    setIsProcessing(true);
+    try {
+      const source = await getCurrentImageSource();
+      const maskedSrc = await applySelectionMaskToImage(
+        source.src,
+        selection,
+        image.naturalWidth,
+        image.naturalHeight
+      );
+      setBackgroundRemovedSrc(maskedSrc);
+      setImageEdits((current) => ({ ...current, removeBackground: true }));
+      setSelection(undefined);
+    } catch (error) {
+      console.error("Applying lasso mask failed:", error);
+      alert("Failed to apply the lasso mask.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const updateVLines = (lines: number[]) => {
     rememberCurrentState();
     setVLines(lines);
@@ -358,10 +455,7 @@ export default function Home() {
     return () => window.removeEventListener("resize", handleResize);
   }, [appMode, handleZoomFit]);
 
-  const backgroundPreviewSrc = useMemo(() => {
-    if (!imageEdits.removeBackground) return undefined;
-    return backgroundRemovedSrc;
-  }, [backgroundRemovedSrc, imageEdits.removeBackground]);
+  const backgroundPreviewSrc = imageEdits.removeBackground ? backgroundRemovedSrc : undefined;
 
   return (
     <div className="h-screen w-screen flex flex-col bg-zinc-950 text-zinc-100 overflow-hidden font-sans select-none">
@@ -437,6 +531,9 @@ export default function Home() {
           <ToolButton label="Remove background" active={appMode === "SLICE" && activeTool === "BACKGROUND"} disabled={!image} onClick={() => { setAppMode("SLICE"); setActiveTool("BACKGROUND"); }}>
             <Eraser size={24} weight={appMode === "SLICE" && activeTool === "BACKGROUND" ? "fill" : "regular"} />
           </ToolButton>
+          <ToolButton label="Lasso selection" active={appMode === "SLICE" && activeTool === "LASSO"} disabled={!image} onClick={() => { setAppMode("SLICE"); setActiveTool("LASSO"); }}>
+            <LassoIcon active={appMode === "SLICE" && activeTool === "LASSO"} />
+          </ToolButton>
           <ToolButton label="Hue editor" active={appMode === "SLICE" && activeTool === "HUE"} disabled={!image} onClick={() => { setAppMode("SLICE"); setActiveTool("HUE"); }}>
             <Palette size={24} weight={appMode === "SLICE" && activeTool === "HUE" ? "fill" : "regular"} />
           </ToolButton>
@@ -507,6 +604,11 @@ export default function Home() {
                   onUpdateVLines={updateVLines}
                   onUpdateHLines={updateHLines}
                   zoom={zoom}
+                  activeTool={activeTool}
+                  selectionMode={selectionMode}
+                  selection={selection}
+                  onSelectionChange={setSelection}
+                  onSmartSelect={handleSmartSelect}
                 />
               </motion.div>
             )}
@@ -537,6 +639,13 @@ export default function Home() {
           isRemovingBackground={isRemovingBackground}
           hasBackgroundRemovedImage={Boolean(backgroundRemovedSrc)}
           onDownloadEditedImage={handleDownloadEditedImage}
+          selectionMode={selectionMode}
+          onSelectionModeChange={updateSelectionMode}
+          smartTolerance={smartTolerance}
+          onSmartToleranceChange={setSmartTolerance}
+          hasSelection={Boolean(selection?.closed)}
+          onApplySelectionMask={applySelectionAsMask}
+          onClearSelection={clearSelection}
         />
       </div>
 

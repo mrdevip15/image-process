@@ -2,6 +2,8 @@
 
 import React, { useRef } from "react";
 import { Trash } from "@phosphor-icons/react";
+import { ActiveTool } from "@/lib/imageEdits";
+import { ImageSelection, SelectionMode, SelectionPoint, clampPoint, distance, pointsToPath } from "@/lib/selection";
 
 interface WorkspaceProps {
   image: HTMLImageElement;
@@ -12,6 +14,11 @@ interface WorkspaceProps {
   onUpdateVLines: (lines: number[]) => void;
   onUpdateHLines: (lines: number[]) => void;
   zoom: number;
+  activeTool: ActiveTool;
+  selectionMode: SelectionMode;
+  selection?: ImageSelection;
+  onSelectionChange: (selection?: ImageSelection) => void;
+  onSmartSelect: (point: SelectionPoint) => void;
 }
 
 export function Workspace({
@@ -22,9 +29,81 @@ export function Workspace({
   hLines,
   onUpdateVLines,
   onUpdateHLines,
-  zoom
+  zoom,
+  activeTool,
+  selectionMode,
+  selection,
+  onSelectionChange,
+  onSmartSelect,
 }: WorkspaceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const freehandPointsRef = useRef<SelectionPoint[]>([]);
+
+  const eventToImagePoint = (event: Pick<PointerEvent | React.PointerEvent, "clientX" | "clientY">) => {
+    if (!containerRef.current) return { x: 0, y: 0 };
+    const rect = containerRef.current.getBoundingClientRect();
+    return clampPoint(
+      {
+        x: ((event.clientX - rect.left) / rect.width) * image.naturalWidth,
+        y: ((event.clientY - rect.top) / rect.height) * image.naturalHeight,
+      },
+      image.naturalWidth,
+      image.naturalHeight
+    );
+  };
+
+  const startLasso = (e: React.PointerEvent) => {
+    if (activeTool !== "LASSO") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const target = e.currentTarget as HTMLElement;
+    const point = eventToImagePoint(e);
+
+    if (selectionMode === "smart") {
+      onSmartSelect(point);
+      return;
+    }
+
+    if (selectionMode === "pen") {
+      const current = selection?.mode === "pen" && !selection.closed ? selection.points : [];
+      if (current.length > 2 && distance(point, current[0]) <= 10 / zoom) {
+        onSelectionChange({ mode: "pen", points: current, closed: true });
+        return;
+      }
+      onSelectionChange({ mode: "pen", points: [...current, point], closed: false });
+      return;
+    }
+
+    target.setPointerCapture(e.pointerId);
+    freehandPointsRef.current = [point];
+    onSelectionChange({ mode: "freehand", points: [point], closed: false });
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const nextPoint = eventToImagePoint(moveEvent);
+      const lastPoint = freehandPointsRef.current.at(-1);
+      if (lastPoint && distance(lastPoint, nextPoint) < 2 / zoom) return;
+      freehandPointsRef.current = [...freehandPointsRef.current, nextPoint];
+      onSelectionChange({ mode: "freehand", points: freehandPointsRef.current, closed: false });
+    };
+
+    const onPointerUp = (upEvent: PointerEvent) => {
+      target.releasePointerCapture(upEvent.pointerId);
+      target.removeEventListener("pointermove", onPointerMove);
+      target.removeEventListener("pointerup", onPointerUp);
+      if (freehandPointsRef.current.length > 2) {
+        onSelectionChange({ mode: "freehand", points: freehandPointsRef.current, closed: true });
+      }
+    };
+
+    target.addEventListener("pointermove", onPointerMove);
+    target.addEventListener("pointerup", onPointerUp);
+  };
+
+  const closePenSelection = (event: React.MouseEvent) => {
+    if (activeTool !== "LASSO" || selectionMode !== "pen" || !selection || selection.points.length < 3) return;
+    event.preventDefault();
+    onSelectionChange({ ...selection, closed: true });
+  };
 
   const startDragging = (
     e: React.PointerEvent, 
@@ -78,7 +157,9 @@ export function Workspace({
     <div className="flex items-center justify-center w-full h-full p-8 overflow-auto checkerboard">
       <div 
         ref={containerRef}
-        className="relative bg-zinc-950 shadow-2xl ring-1 ring-white/10 flex-shrink-0"
+        onPointerDown={startLasso}
+        onDoubleClick={closePenSelection}
+        className={`relative bg-zinc-950 shadow-2xl ring-1 ring-white/10 flex-shrink-0 ${activeTool === "LASSO" ? "cursor-crosshair touch-none" : ""}`}
         style={{
           width: image.naturalWidth * zoom,
           height: image.naturalHeight * zoom,
@@ -92,8 +173,45 @@ export function Workspace({
           className="block pointer-events-none select-none opacity-90"
         />
 
+        {activeTool === "LASSO" && selection && selection.points.length > 0 && (
+          <svg
+            className="pointer-events-none absolute inset-0 z-20"
+            width={image.naturalWidth * zoom}
+            height={image.naturalHeight * zoom}
+            viewBox={`0 0 ${image.naturalWidth * zoom} ${image.naturalHeight * zoom}`}
+          >
+            <path
+              d={pointsToPath(selection.points, zoom, selection.closed)}
+              fill={selection.closed ? "rgba(16, 185, 129, 0.12)" : "none"}
+              stroke="rgba(5, 150, 105, 0.95)"
+              strokeWidth={2}
+              strokeDasharray="8 5"
+              className="animate-pulse"
+            />
+            <path
+              d={pointsToPath(selection.points, zoom, selection.closed)}
+              fill="none"
+              stroke="white"
+              strokeWidth={1}
+              strokeDasharray="8 5"
+              strokeDashoffset={8}
+            />
+            {selectionMode === "pen" && selection.points.map((point, index) => (
+              <circle
+                key={`${point.x}-${point.y}-${index}`}
+                cx={point.x * zoom}
+                cy={point.y * zoom}
+                r={index === 0 ? 5 : 4}
+                fill={index === 0 ? "#10b981" : "#f8fafc"}
+                stroke="#064e3b"
+                strokeWidth={1.5}
+              />
+            ))}
+          </svg>
+        )}
+
         {/* Vertical Lines */}
-        {vLines.map((percent, i) => (
+        {activeTool !== "LASSO" && vLines.map((percent, i) => (
           <div
             key={`v-${i}`}
             onPointerDown={(e) => startDragging(e, i, "v")}
@@ -113,7 +231,7 @@ export function Workspace({
         ))}
 
         {/* Horizontal Lines */}
-        {hLines.map((percent, i) => (
+        {activeTool !== "LASSO" && hLines.map((percent, i) => (
           <div
             key={`h-${i}`}
             onPointerDown={(e) => startDragging(e, i, "h")}
