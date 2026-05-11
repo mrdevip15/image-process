@@ -63,7 +63,7 @@ export function Cropper({ image, onCropComplete }: CropperProps) {
         <p className="text-zinc-500 text-sm">Select the area containing your icon grid</p>
       </div>
 
-      <div className="relative bento-card p-4 max-h-[70vh]">
+      <div className="relative bento-card p-4">
         <ReactCrop
           crop={crop}
           onChange={(c) => setCrop(c)}
@@ -80,15 +80,18 @@ export function Cropper({ image, onCropComplete }: CropperProps) {
         </ReactCrop>
       </div>
 
-      <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={handleConfirm}
-        className="flex items-center gap-2 px-8 py-3 rounded-2xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold shadow-xl"
-      >
-        <CheckCircle size={24} weight="bold" />
-        <span>Confirm Crop</span>
-      </motion.button>
+      <div className="flex flex-col items-center gap-4 w-full">
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={handleConfirm}
+          className="flex items-center gap-2 px-12 py-4 rounded-2xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold shadow-2xl z-50"
+        >
+          <CheckCircle size={24} weight="bold" />
+          <span>Confirm Crop & Start Slicing</span>
+        </motion.button>
+        <p className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Step 2 of 3</p>
+      </div>
     </div>
   );
 }
