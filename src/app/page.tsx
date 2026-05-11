@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Dropzone } from "@/components/Dropzone";
 import { Workspace } from "@/components/Workspace";
 import { RightPanel } from "@/components/RightPanel";
@@ -30,16 +30,42 @@ export default function Home() {
   
   // Canvas State (Zoom)
   const [zoom, setZoom] = useState(1);
+  const canvasAreaRef = useRef<HTMLDivElement>(null);
 
   // Crop State moved here for sidebar access
   const [crop, setCrop] = useState<CropState>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
   const imgRef = useRef<HTMLImageElement>(null);
 
+  const calculateFitZoom = useCallback((img: HTMLImageElement) => {
+    if (!canvasAreaRef.current) return 1;
+    const padding = 64; // Account for p-8 on both sides
+    const availableWidth = canvasAreaRef.current.clientWidth - padding;
+    const availableHeight = canvasAreaRef.current.clientHeight - padding;
+    
+    const scaleX = availableWidth / img.naturalWidth;
+    const scaleY = availableHeight / img.naturalHeight;
+    
+    // Choose the smaller scale to ensure it fits both dimensions
+    // Cap at 1 (100%) so we don't upscale small images automatically
+    return Math.min(scaleX, scaleY, 1);
+  }, []);
+
+  const handleZoomFit = useCallback(() => {
+    const activeImage = originalImage || image;
+    if (activeImage) {
+      setZoom(calculateFitZoom(activeImage));
+    }
+  }, [originalImage, image, calculateFitZoom]);
+
   const handleUpload = (img: HTMLImageElement) => {
     setOriginalImage(img);
     setAppMode("CROP");
-    setZoom(1);
+    // We need to wait for the next tick or use a timeout to ensure 
+    // the layout has settled if canvasAreaRef depends on conditional rendering
+    setTimeout(() => {
+      setZoom(calculateFitZoom(img));
+    }, 50);
   };
 
   const handleConfirmCrop = async () => {
@@ -71,7 +97,7 @@ export default function Home() {
     croppedImg.onload = () => {
       setImage(croppedImg);
       setAppMode("SLICE");
-      setZoom(1);
+      setZoom(calculateFitZoom(croppedImg));
       generateGrid(4, 4);
     };
     croppedImg.src = canvas.toDataURL("image/png");
@@ -119,6 +145,17 @@ export default function Home() {
     setCompletedCrop(undefined);
     setZoom(1);
   };
+
+  // Recalculate zoom on window resize if in CROP or SLICE mode
+  useEffect(() => {
+    const handleResize = () => {
+      if (appMode !== "UPLOAD") {
+        handleZoomFit();
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [appMode, handleZoomFit]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-zinc-950 text-zinc-100 overflow-hidden font-sans select-none">
@@ -174,7 +211,7 @@ export default function Home() {
         </aside>
 
         {/* Center Canvas Area */}
-        <main className="flex-1 relative overflow-hidden flex items-center justify-center bg-zinc-950">
+        <main ref={canvasAreaRef} className="flex-1 relative overflow-hidden flex items-center justify-center bg-zinc-950">
           <AnimatePresence mode="wait">
             {appMode === "UPLOAD" && (
               <motion.div
@@ -243,7 +280,7 @@ export default function Home() {
           zoom={zoom}
           onZoomIn={() => setZoom(prev => Math.min(prev + 0.1, 3))}
           onZoomOut={() => setZoom(prev => Math.max(prev - 0.1, 0.1))}
-          onZoomFit={() => setZoom(1)}
+          onZoomFit={handleZoomFit}
         />
       </div>
 

@@ -36,15 +36,16 @@ export function Workspace({
       const rect = containerRef.current.getBoundingClientRect();
       
       // Calculate position relative to the container, considering the CSS scale
+      // rect.width/height already includes the zoom scale
       if (type === "v") {
-        const newX = (moveEvent.clientX - rect.left) / zoom;
-        const newPercent = Math.max(0, Math.min(100, (newX / (rect.width / zoom)) * 100));
+        const newX = (moveEvent.clientX - rect.left);
+        const newPercent = Math.max(0, Math.min(100, (newX / rect.width) * 100));
         const newLines = [...vLines];
         newLines[index] = newPercent;
         onUpdateVLines(newLines);
       } else {
-        const newY = (moveEvent.clientY - rect.top) / zoom;
-        const newPercent = Math.max(0, Math.min(100, (newY / (rect.height / zoom)) * 100));
+        const newY = (moveEvent.clientY - rect.top);
+        const newPercent = Math.max(0, Math.min(100, (newY / rect.height) * 100));
         const newLines = [...hLines];
         newLines[index] = newPercent;
         onUpdateHLines(newLines);
@@ -84,7 +85,8 @@ export function Workspace({
         <img 
           src={image.src} 
           alt="To be sliced" 
-          className="max-h-[80vh] w-auto block pointer-events-none select-none opacity-90"
+          style={{ maxWidth: 'none' }}
+          className="block pointer-events-none select-none opacity-90"
         />
 
         {/* Vertical Lines */}

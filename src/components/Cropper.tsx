@@ -25,8 +25,13 @@ export function Cropper({ image, crop, setCrop, setCompletedCrop, imgRef, zoom }
 
   return (
     <div className="flex items-center justify-center w-full h-full p-8 overflow-auto checkerboard">
+      {/* 
+          To fix "weird" cropping behavior when zoomed, we apply the scale 
+          only to the wrapper. React-image-crop handles its own events, 
+          so we need to ensure the container doesn't mess with its coordinate math.
+      */}
       <div 
-        className="shadow-2xl ring-1 ring-white/10 transition-transform duration-200 ease-out origin-center"
+        className="shadow-2xl ring-1 ring-white/10 origin-center transition-transform duration-200 ease-out"
         style={{ transform: `scale(${zoom})` }}
       >
         <ReactCrop
@@ -40,7 +45,12 @@ export function Cropper({ image, crop, setCrop, setCompletedCrop, imgRef, zoom }
             src={image.src}
             alt="Original"
             onLoad={onImageLoad}
-            className="max-h-[80vh] w-auto block select-none"
+            style={{ 
+              // We use natural dimensions and let the parent scale handle the "fit"
+              // but we must ensure it doesn't get squished by flex/grid
+              maxWidth: 'none' 
+            }}
+            className="block select-none"
           />
         </ReactCrop>
       </div>
