@@ -29,10 +29,18 @@ import {
   SlidersHorizontal,
   DownloadSimple,
   ArrowCounterClockwise,
+  ArrowUUpLeft,
+  ArrowUUpRight,
 } from "@phosphor-icons/react";
 import { Crop as CropState, PixelCrop } from "react-image-crop";
 
 type AppMode = "UPLOAD" | "CROP" | "SLICE";
+
+interface EditorSnapshot {
+  vLines: number[];
+  hLines: number[];
+  imageEdits: ImageEdits;
+}
 
 interface ToolButtonProps {
   label: string;
@@ -71,6 +79,8 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTool, setActiveTool] = useState<ActiveTool>("GRID");
   const [imageEdits, setImageEdits] = useState<ImageEdits>(defaultImageEdits);
+  const [undoStack, setUndoStack] = useState<EditorSnapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<EditorSnapshot[]>([]);
   
   // Canvas State (Zoom)
   const [zoom, setZoom] = useState(1);
@@ -102,10 +112,46 @@ export default function Home() {
     }
   }, [originalImage, image, calculateFitZoom]);
 
+  const createSnapshot = useCallback((): EditorSnapshot => ({
+    vLines: [...vLines],
+    hLines: [...hLines],
+    imageEdits: { ...imageEdits },
+  }), [hLines, imageEdits, vLines]);
+
+  const rememberCurrentState = useCallback(() => {
+    const snapshot = createSnapshot();
+    setUndoStack((current) => [...current.slice(-49), snapshot]);
+    setRedoStack([]);
+  }, [createSnapshot]);
+
+  const restoreSnapshot = (snapshot: EditorSnapshot) => {
+    setVLines(snapshot.vLines);
+    setHLines(snapshot.hLines);
+    setImageEdits(snapshot.imageEdits);
+  };
+
+  const handleUndo = () => {
+    const previous = undoStack.at(-1);
+    if (!previous) return;
+    setRedoStack((current) => [...current.slice(-49), createSnapshot()]);
+    setUndoStack((current) => current.slice(0, -1));
+    restoreSnapshot(previous);
+  };
+
+  const handleRedo = () => {
+    const next = redoStack.at(-1);
+    if (!next) return;
+    setUndoStack((current) => [...current.slice(-49), createSnapshot()]);
+    setRedoStack((current) => current.slice(0, -1));
+    restoreSnapshot(next);
+  };
+
   const handleUpload = (img: HTMLImageElement) => {
     setOriginalImage(img);
     setImage(null);
     setImageEdits(defaultImageEdits);
+    setUndoStack([]);
+    setRedoStack([]);
     setActiveTool("GRID");
     setAppMode("CROP");
     // We need to wait for the next tick or use a timeout to ensure 
@@ -146,12 +192,13 @@ export default function Home() {
       setAppMode("SLICE");
       setActiveTool("GRID");
       setZoom(calculateFitZoom(croppedImg));
-      generateGrid(4, 4);
+      generateGrid(4, 4, false);
     };
     croppedImg.src = canvas.toDataURL("image/png");
   };
 
-  const generateGrid = (rows: number, cols: number) => {
+  const generateGrid = (rows: number, cols: number, shouldRemember = true) => {
+    if (shouldRemember) rememberCurrentState();
     const newVLines = [];
     for (let i = 1; i < cols; i++) {
       newVLines.push((i / cols) * 100);
@@ -214,14 +261,38 @@ export default function Home() {
     setZoom(1);
     setActiveTool("GRID");
     setImageEdits(defaultImageEdits);
+    setUndoStack([]);
+    setRedoStack([]);
   };
 
   const updateImageEdits = (nextEdits: Partial<ImageEdits>) => {
+    rememberCurrentState();
     setImageEdits((current) => ({ ...current, ...nextEdits }));
   };
 
   const resetImageEdits = () => {
+    rememberCurrentState();
     setImageEdits(defaultImageEdits);
+  };
+
+  const updateVLines = (lines: number[]) => {
+    rememberCurrentState();
+    setVLines(lines);
+  };
+
+  const updateHLines = (lines: number[]) => {
+    rememberCurrentState();
+    setHLines(lines);
+  };
+
+  const addVLine = () => {
+    rememberCurrentState();
+    setVLines([...vLines, 50]);
+  };
+
+  const addHLine = () => {
+    rememberCurrentState();
+    setHLines([...hLines, 50]);
   };
 
   // Recalculate zoom on window resize if in CROP or SLICE mode
@@ -266,6 +337,29 @@ export default function Home() {
         </div>
         
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              title="Undo"
+              aria-label="Undo"
+              disabled={!image || undoStack.length === 0}
+              onClick={handleUndo}
+              className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+            >
+              <ArrowUUpLeft size={18} />
+            </button>
+            <button
+              type="button"
+              title="Redo"
+              aria-label="Redo"
+              disabled={!image || redoStack.length === 0}
+              onClick={handleRedo}
+              className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+            >
+              <ArrowUUpRight size={18} />
+            </button>
+          </div>
+          <div className="h-4 w-px bg-zinc-800" />
           {image && (
             <div className="text-[10px] font-mono text-zinc-500 flex gap-3">
               <span>{image.naturalWidth} x {image.naturalHeight} PX</span>
@@ -364,8 +458,8 @@ export default function Home() {
                   imageFilter={imageEdits.removeBackground ? "none" : buildImageFilter(imageEdits)}
                   vLines={vLines}
                   hLines={hLines}
-                  onUpdateVLines={setVLines}
-                  onUpdateHLines={setHLines}
+                  onUpdateVLines={updateVLines}
+                  onUpdateHLines={updateHLines}
                   zoom={zoom}
                 />
               </motion.div>
@@ -376,8 +470,8 @@ export default function Home() {
         {/* Right Properties Panel */}
         <RightPanel 
           mode={appMode}
-          onAddVLine={() => setVLines([...vLines, 50])}
-          onAddHLine={() => setHLines([...hLines, 50])}
+          onAddVLine={addVLine}
+          onAddHLine={addHLine}
           onGenerateGrid={generateGrid}
           onDownload={handleDownload}
           onReset={handleReset}
