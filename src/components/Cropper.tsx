@@ -1,23 +1,19 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React from "react";
 import ReactCrop, { Crop, PixelCrop, centerCrop, makeAspectCrop } from "react-image-crop";
-import { motion } from "framer-motion";
-import { CheckCircle } from "@phosphor-icons/react";
 
 interface CropperProps {
   image: HTMLImageElement;
-  onCropComplete: (croppedImage: HTMLImageElement) => void;
+  crop: Crop | undefined;
+  setCrop: (crop: Crop) => void;
+  setCompletedCrop: (crop: PixelCrop) => void;
+  imgRef: React.RefObject<HTMLImageElement | null>;
 }
 
-export function Cropper({ image, onCropComplete }: CropperProps) {
-  const [crop, setCrop] = useState<Crop>();
-  const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
-  const imgRef = useRef<HTMLImageElement>(null);
-
+export function Cropper({ image, crop, setCrop, setCompletedCrop, imgRef }: CropperProps) {
   const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { width, height } = e.currentTarget;
-    // Initial crop: 90% of the image
     const initialCrop = centerCrop(
       makeAspectCrop({ unit: "%", width: 90 }, 1, width, height),
       width,
@@ -26,44 +22,9 @@ export function Cropper({ image, onCropComplete }: CropperProps) {
     setCrop(initialCrop);
   };
 
-  const handleConfirm = async () => {
-    if (!completedCrop || !imgRef.current) return;
-
-    const canvas = document.createElement("canvas");
-    const scaleX = imgRef.current.naturalWidth / imgRef.current.width;
-    const scaleY = imgRef.current.naturalHeight / imgRef.current.height;
-    
-    canvas.width = completedCrop.width * scaleX;
-    canvas.height = completedCrop.height * scaleY;
-    
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.drawImage(
-      imgRef.current,
-      completedCrop.x * scaleX,
-      completedCrop.y * scaleY,
-      completedCrop.width * scaleX,
-      completedCrop.height * scaleY,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
-
-    const croppedImg = new Image();
-    croppedImg.onload = () => onCropComplete(croppedImg);
-    croppedImg.src = canvas.toDataURL("image/png");
-  };
-
   return (
-    <div className="flex flex-col items-center gap-8 py-12 px-4 w-full max-w-5xl">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold tracking-tight mb-2">Crop your image</h2>
-        <p className="text-zinc-500 text-sm">Select the area containing your icon grid</p>
-      </div>
-
-      <div className="relative bento-card p-4">
+    <div className="flex items-center justify-center w-full h-full p-8 overflow-auto checkerboard">
+      <div className="shadow-2xl ring-1 ring-white/10">
         <ReactCrop
           crop={crop}
           onChange={(c) => setCrop(c)}
@@ -75,22 +36,9 @@ export function Cropper({ image, onCropComplete }: CropperProps) {
             src={image.src}
             alt="Original"
             onLoad={onImageLoad}
-            className="max-h-[60vh] w-auto block"
+            className="max-h-[80vh] w-auto block select-none"
           />
         </ReactCrop>
-      </div>
-
-      <div className="flex flex-col items-center gap-4 w-full">
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleConfirm}
-          className="flex items-center gap-2 px-12 py-4 rounded-2xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold shadow-2xl z-50"
-        >
-          <CheckCircle size={24} weight="bold" />
-          <span>Confirm Crop & Start Slicing</span>
-        </motion.button>
-        <p className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Step 2 of 3</p>
       </div>
     </div>
   );

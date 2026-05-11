@@ -67,21 +67,20 @@ export function Workspace({
   };
 
   return (
-    <div className="relative w-full max-w-5xl mx-auto flex flex-col items-center gap-8 py-12 px-4 overflow-auto max-h-[80vh]">
+    <div className="flex items-center justify-center w-full h-full p-8 overflow-auto checkerboard">
       <div 
         ref={containerRef}
-        className="relative bg-zinc-100 dark:bg-zinc-900 rounded-lg shadow-2xl ring-1 ring-zinc-200 dark:ring-zinc-800"
+        className="relative bg-zinc-950 shadow-2xl ring-1 ring-white/10"
         style={{
           width: "fit-content",
           height: "fit-content",
-          maxWidth: "100%",
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img 
           src={image.src} 
           alt="To be sliced" 
-          className="max-w-full h-auto block pointer-events-none select-none opacity-90"
+          className="max-h-[80vh] w-auto block pointer-events-none select-none opacity-90"
         />
 
         {/* Vertical Lines */}
@@ -123,10 +122,6 @@ export function Workspace({
             </div>
           </div>
         ))}
-      </div>
-      
-      <div className="text-sm text-zinc-500 font-mono">
-        {image.naturalWidth} × {image.naturalHeight}px • {vLines.length + 1} × {hLines.length + 1} slices
       </div>
     </div>
   );

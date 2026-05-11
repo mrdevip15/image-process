@@ -12,15 +12,8 @@
 }
 
 :root {
-  --background: #f9fafb;
-  --foreground: #09090b;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #09090b;
-    --foreground: #f9fafb;
-  }
+  --background: #09090b;
+  --foreground: #f9fafb;
 }
 
 body {
@@ -29,20 +22,22 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
 }
 
 @layer base {
   * {
-    @apply border-zinc-200/50 dark:border-zinc-800/50;
+    @apply border-zinc-800;
   }
 }
 
 @layer utilities {
-  .glass {
-    @apply backdrop-blur-md bg-white/70 dark:bg-zinc-900/70 border border-white/20 dark:border-zinc-800/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)];
-  }
-  
-  .bento-card {
-    @apply bg-white dark:bg-zinc-900/50 rounded-3xl border border-zinc-200/50 dark:border-zinc-800/50 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)];
+  .checkerboard {
+    background-image: linear-gradient(45deg, #18181b 25%, transparent 25%),
+      linear-gradient(-45deg, #18181b 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #18181b 75%),
+      linear-gradient(-45deg, transparent 75%, #18181b 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
   }
 }
