@@ -35,8 +35,8 @@ export function Workspace({
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       
-      // Calculate position relative to the container, considering the CSS scale
-      // rect.width/height already includes the zoom scale
+      // Since we are physically scaling the width/height of the container,
+      // rect.width is the current visual width. newX / rect.width is the 0-1 percentage.
       if (type === "v") {
         const newX = (moveEvent.clientX - rect.left);
         const newPercent = Math.max(0, Math.min(100, (newX / rect.width) * 100));
@@ -74,18 +74,17 @@ export function Workspace({
     <div className="flex items-center justify-center w-full h-full p-8 overflow-auto checkerboard">
       <div 
         ref={containerRef}
-        className="relative bg-zinc-950 shadow-2xl ring-1 ring-white/10 transition-transform duration-200 ease-out origin-center"
+        className="relative bg-zinc-950 shadow-2xl ring-1 ring-white/10 flex-shrink-0"
         style={{
-          width: "fit-content",
-          height: "fit-content",
-          transform: `scale(${zoom})`
+          width: image.naturalWidth * zoom,
+          height: image.naturalHeight * zoom,
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img 
           src={image.src} 
           alt="To be sliced" 
-          style={{ maxWidth: 'none' }}
+          style={{ width: '100%', height: '100%' }}
           className="block pointer-events-none select-none opacity-90"
         />
 
