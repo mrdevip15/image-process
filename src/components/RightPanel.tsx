@@ -11,9 +11,16 @@ import {
   Info,
   MagnifyingGlassPlus,
   MagnifyingGlassMinus,
-  ArrowsIn
+  ArrowsIn,
+  Eraser,
+  Palette,
+  SlidersHorizontal,
+  CircleHalf,
+  DropHalf,
+  ImageSquare,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { ActiveTool, ImageEdits, hasVisualEdits } from "@/lib/imageEdits";
 
 interface RightPanelProps {
   mode: "UPLOAD" | "CROP" | "SLICE";
@@ -30,6 +37,49 @@ interface RightPanelProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomFit: () => void;
+  activeTool: ActiveTool;
+  imageEdits: ImageEdits;
+  onUpdateImageEdits: (edits: Partial<ImageEdits>) => void;
+  onResetImageEdits: () => void;
+  onDownloadEditedImage: () => void;
+}
+
+interface SliderControlProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  unit?: string;
+  onChange: (value: number) => void;
+}
+
+function SliderControl({ label, value, min, max, unit = "", onChange }: SliderControlProps) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
+        <span className="text-zinc-500">{label}</span>
+        <span className="font-mono text-zinc-300">{value}{unit}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full accent-emerald-500"
+        aria-label={label}
+      />
+    </div>
+  );
+}
+
+function GridIconLabel({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-zinc-500 tracking-wider">
+      <span className="text-emerald-500">{icon}</span>
+      {label}
+    </label>
+  );
 }
 
 export function RightPanel({
@@ -46,7 +96,12 @@ export function RightPanel({
   zoom,
   onZoomIn,
   onZoomOut,
-  onZoomFit
+  onZoomFit,
+  activeTool,
+  imageEdits,
+  onUpdateImageEdits,
+  onResetImageEdits,
+  onDownloadEditedImage
 }: RightPanelProps) {
   const [gridConfig, setGridConfig] = useState({ rows: 4, cols: 4 });
 
@@ -116,65 +171,190 @@ export function RightPanel({
 
         {mode === "SLICE" && (
           <div className="p-4 pt-0 space-y-6">
-            <div className="space-y-4">
-              <label className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Grid Generator</label>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <span className="text-[10px] text-zinc-600 font-mono">ROWS</span>
-                  <div className="flex items-center gap-2 bg-zinc-950 p-2 rounded border border-zinc-800">
-                    <input
-                      type="number"
-                      value={gridConfig.rows}
-                      onChange={(e) => setGridConfig({ ...gridConfig, rows: parseInt(e.target.value) || 0 })}
-                      className="w-full bg-transparent text-xs font-mono focus:outline-none"
-                    />
-                    <Rows size={14} className="text-zinc-600" />
+            {activeTool === "GRID" && (
+              <>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <GridIconLabel icon={<Rows size={14} />} label="Grid Generator" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] text-zinc-600 font-mono">ROWS</span>
+                      <div className="flex items-center gap-2 bg-zinc-950 p-2 rounded border border-zinc-800">
+                        <input
+                          type="number"
+                          value={gridConfig.rows}
+                          onChange={(e) => setGridConfig({ ...gridConfig, rows: parseInt(e.target.value) || 0 })}
+                          className="w-full bg-transparent text-xs font-mono focus:outline-none"
+                        />
+                        <Rows size={14} className="text-zinc-600" />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] text-zinc-600 font-mono">COLS</span>
+                      <div className="flex items-center gap-2 bg-zinc-950 p-2 rounded border border-zinc-800">
+                        <input
+                          type="number"
+                          value={gridConfig.cols}
+                          onChange={(e) => setGridConfig({ ...gridConfig, cols: parseInt(e.target.value) || 0 })}
+                          className="w-full bg-transparent text-xs font-mono focus:outline-none"
+                        />
+                        <Columns size={14} className="text-zinc-600" />
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onGenerateGrid(gridConfig.rows, gridConfig.cols)}
+                    className="w-full py-2 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-bold transition-colors"
+                  >
+                    Apply Grid
+                  </button>
+                </div>
+
+                <div className="h-px bg-zinc-800" />
+
+                <div className="space-y-4">
+                  <label className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Manual Adjust</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={onAddVLine}
+                      title="Add vertical slice line"
+                      className="flex-1 flex items-center justify-center gap-2 py-2 rounded border border-zinc-800 hover:bg-zinc-800 text-[11px] font-medium transition-colors"
+                    >
+                      <PlusCircle size={14} />
+                      V-Line
+                    </button>
+                    <button
+                      onClick={onAddHLine}
+                      title="Add horizontal slice line"
+                      className="flex-1 flex items-center justify-center gap-2 py-2 rounded border border-zinc-800 hover:bg-zinc-800 text-[11px] font-medium transition-colors"
+                    >
+                      <PlusCircle size={14} />
+                      H-Line
+                    </button>
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <span className="text-[10px] text-zinc-600 font-mono">COLS</span>
-                  <div className="flex items-center gap-2 bg-zinc-950 p-2 rounded border border-zinc-800">
-                    <input
-                      type="number"
-                      value={gridConfig.cols}
-                      onChange={(e) => setGridConfig({ ...gridConfig, cols: parseInt(e.target.value) || 0 })}
-                      className="w-full bg-transparent text-xs font-mono focus:outline-none"
-                    />
-                    <Columns size={14} className="text-zinc-600" />
-                  </div>
-                </div>
+              </>
+            )}
+
+            {activeTool === "BACKGROUND" && (
+              <div className="space-y-4">
+                <GridIconLabel icon={<Eraser size={14} />} label="Remove Background" />
+                <p className="text-xs text-zinc-400 leading-relaxed bg-zinc-950 p-3 rounded border border-zinc-800">
+                  Removes pixels similar to the four image corners. Best for flat white, black, or solid-color icon sheets.
+                </p>
+                <button
+                  onClick={() => onUpdateImageEdits({ removeBackground: !imageEdits.removeBackground })}
+                  title="Toggle background removal"
+                  className={cn(
+                    "w-full flex items-center justify-center gap-2 py-3 rounded font-bold text-sm transition-colors",
+                    imageEdits.removeBackground
+                      ? "bg-emerald-600 text-white hover:bg-emerald-500"
+                      : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                  )}
+                >
+                  <Eraser size={18} weight="bold" />
+                  {imageEdits.removeBackground ? "Background Removed" : "Remove Background"}
+                </button>
+                <SliderControl
+                  label="Tolerance"
+                  value={imageEdits.backgroundTolerance}
+                  min={1}
+                  max={100}
+                  unit="%"
+                  onChange={(value) => onUpdateImageEdits({ backgroundTolerance: value })}
+                />
               </div>
+            )}
+
+            {activeTool === "HUE" && (
+              <div className="space-y-5">
+                <GridIconLabel icon={<Palette size={14} />} label="Hue Editor" />
+                <SliderControl
+                  label="Hue"
+                  value={imageEdits.hue}
+                  min={0}
+                  max={360}
+                  unit="°"
+                  onChange={(value) => onUpdateImageEdits({ hue: value })}
+                />
+                <SliderControl
+                  label="Saturation"
+                  value={imageEdits.saturation}
+                  min={0}
+                  max={200}
+                  unit="%"
+                  onChange={(value) => onUpdateImageEdits({ saturation: value })}
+                />
+                <SliderControl
+                  label="Brightness"
+                  value={imageEdits.brightness}
+                  min={25}
+                  max={200}
+                  unit="%"
+                  onChange={(value) => onUpdateImageEdits({ brightness: value })}
+                />
+              </div>
+            )}
+
+            {activeTool === "EFFECTS" && (
+              <div className="space-y-5">
+                <GridIconLabel icon={<SlidersHorizontal size={14} />} label="Effects" />
+                <SliderControl
+                  label="Contrast"
+                  value={imageEdits.contrast}
+                  min={25}
+                  max={200}
+                  unit="%"
+                  onChange={(value) => onUpdateImageEdits({ contrast: value })}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => onUpdateImageEdits({ grayscale: !imageEdits.grayscale })}
+                    title="Toggle grayscale"
+                    className={cn(
+                      "flex items-center justify-center gap-2 py-2 rounded border text-[11px] font-bold transition-colors",
+                      imageEdits.grayscale ? "border-emerald-500 bg-emerald-500/10 text-emerald-300" : "border-zinc-800 hover:bg-zinc-800"
+                    )}
+                  >
+                    <CircleHalf size={14} />
+                    Gray
+                  </button>
+                  <button
+                    onClick={() => onUpdateImageEdits({ invert: !imageEdits.invert })}
+                    title="Toggle invert colors"
+                    className={cn(
+                      "flex items-center justify-center gap-2 py-2 rounded border text-[11px] font-bold transition-colors",
+                      imageEdits.invert ? "border-emerald-500 bg-emerald-500/10 text-emerald-300" : "border-zinc-800 hover:bg-zinc-800"
+                    )}
+                  >
+                    <DropHalf size={14} />
+                    Invert
+                  </button>
+                </div>
+                <button
+                  onClick={onDownloadEditedImage}
+                  title="Download the edited sheet before slicing"
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-bold transition-colors"
+                >
+                  <ImageSquare size={15} />
+                  Export Edited Sheet
+                </button>
+              </div>
+            )}
+
+            <div className="h-px bg-zinc-800" />
+
+            {hasVisualEdits(imageEdits) && (
               <button
-                onClick={() => onGenerateGrid(gridConfig.rows, gridConfig.cols)}
-                className="w-full py-2 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-bold transition-colors"
+                onClick={onResetImageEdits}
+                title="Reset background, hue, and effects"
+                className="w-full flex items-center justify-center gap-2 py-2 rounded text-[11px] font-bold text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
               >
-                Apply Grid
+                <ArrowCounterClockwise size={14} />
+                Reset Edits
               </button>
-            </div>
-
-            <div className="h-px bg-zinc-800" />
-
-            <div className="space-y-4">
-              <label className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Manual Adjust</label>
-              <div className="flex gap-2">
-                <button
-                  onClick={onAddVLine}
-                  className="flex-1 flex items-center justify-center gap-2 py-2 rounded border border-zinc-800 hover:bg-zinc-800 text-[11px] font-medium transition-colors"
-                >
-                  <PlusCircle size={14} />
-                  V-Line
-                </button>
-                <button
-                  onClick={onAddHLine}
-                  className="flex-1 flex items-center justify-center gap-2 py-2 rounded border border-zinc-800 hover:bg-zinc-800 text-[11px] font-medium transition-colors"
-                >
-                  <PlusCircle size={14} />
-                  H-Line
-                </button>
-              </div>
-            </div>
-
-            <div className="h-px bg-zinc-800" />
+            )}
 
             {imageDimensions && (
               <div className="space-y-3 font-mono text-[11px]">

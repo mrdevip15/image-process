@@ -1,11 +1,20 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Dropzone } from "@/components/Dropzone";
 import { Workspace } from "@/components/Workspace";
 import { RightPanel } from "@/components/RightPanel";
 import { Cropper } from "@/components/Cropper";
 import { sliceImage } from "@/lib/slicer";
+import {
+  ActiveTool,
+  ImageEdits,
+  buildImageFilter,
+  canvasToImage,
+  defaultImageEdits,
+  hasVisualEdits,
+  renderEditedCanvas,
+} from "@/lib/imageEdits";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,11 +23,44 @@ import {
   Crop, 
   GridFour, 
   CloudArrowUp,
-  Files
+  Files,
+  Eraser,
+  Palette,
+  SlidersHorizontal,
+  DownloadSimple,
+  ArrowCounterClockwise,
 } from "@phosphor-icons/react";
 import { Crop as CropState, PixelCrop } from "react-image-crop";
 
 type AppMode = "UPLOAD" | "CROP" | "SLICE";
+
+interface ToolButtonProps {
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+  children: React.ReactNode;
+}
+
+function ToolButton({ label, active, disabled, onClick, children }: ToolButtonProps) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`group relative p-2 rounded-lg transition-colors ${
+        active ? "bg-zinc-800 text-emerald-500" : "text-zinc-600 hover:text-zinc-100 hover:bg-zinc-800/70"
+      } ${disabled ? "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-zinc-600" : ""}`}
+    >
+      {children}
+      <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-200 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+        {label}
+      </span>
+    </button>
+  );
+}
 
 export default function Home() {
   const [appMode, setAppMode] = useState<AppMode>("UPLOAD");
@@ -27,6 +69,8 @@ export default function Home() {
   const [vLines, setVLines] = useState<number[]>([]); // percentages
   const [hLines, setHLines] = useState<number[]>([]); // percentages
   const [isProcessing, setIsProcessing] = useState(false);
+  const [activeTool, setActiveTool] = useState<ActiveTool>("GRID");
+  const [imageEdits, setImageEdits] = useState<ImageEdits>(defaultImageEdits);
   
   // Canvas State (Zoom)
   const [zoom, setZoom] = useState(1);
@@ -60,6 +104,9 @@ export default function Home() {
 
   const handleUpload = (img: HTMLImageElement) => {
     setOriginalImage(img);
+    setImage(null);
+    setImageEdits(defaultImageEdits);
+    setActiveTool("GRID");
     setAppMode("CROP");
     // We need to wait for the next tick or use a timeout to ensure 
     // the layout has settled if canvasAreaRef depends on conditional rendering
@@ -97,6 +144,7 @@ export default function Home() {
     croppedImg.onload = () => {
       setImage(croppedImg);
       setAppMode("SLICE");
+      setActiveTool("GRID");
       setZoom(calculateFitZoom(croppedImg));
       generateGrid(4, 4);
     };
@@ -120,9 +168,12 @@ export default function Home() {
     if (!image) return;
     setIsProcessing(true);
     try {
+      const exportImage = hasVisualEdits(imageEdits)
+        ? await canvasToImage(renderEditedCanvas(image, imageEdits))
+        : image;
       const vPixels = vLines.map((p) => (p / 100) * image.naturalWidth);
       const hPixels = hLines.map((p) => (p / 100) * image.naturalHeight);
-      const slices = await sliceImage(image, vPixels, hPixels);
+      const slices = await sliceImage(exportImage, vPixels, hPixels);
       const zip = new JSZip();
       slices.forEach((slice) => zip.file(slice.filename, slice.blob));
       const content = await zip.generateAsync({ type: "blob" });
@@ -130,6 +181,23 @@ export default function Home() {
     } catch (error) {
       console.error("Slicing failed:", error);
       alert("Failed to slice image.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDownloadEditedImage = async () => {
+    if (!image) return;
+    setIsProcessing(true);
+    try {
+      const canvas = renderEditedCanvas(image, imageEdits);
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((b) => resolve(b), "image/png")
+      );
+      if (blob) saveAs(blob, "edited_icon_sheet.png");
+    } catch (error) {
+      console.error("Export failed:", error);
+      alert("Failed to export edited image.");
     } finally {
       setIsProcessing(false);
     }
@@ -144,6 +212,16 @@ export default function Home() {
     setCrop(undefined);
     setCompletedCrop(undefined);
     setZoom(1);
+    setActiveTool("GRID");
+    setImageEdits(defaultImageEdits);
+  };
+
+  const updateImageEdits = (nextEdits: Partial<ImageEdits>) => {
+    setImageEdits((current) => ({ ...current, ...nextEdits }));
+  };
+
+  const resetImageEdits = () => {
+    setImageEdits(defaultImageEdits);
   };
 
   // Recalculate zoom on window resize if in CROP or SLICE mode
@@ -156,6 +234,17 @@ export default function Home() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [appMode, handleZoomFit]);
+
+  const backgroundPreviewSrc = useMemo(() => {
+    if (!image || !imageEdits.removeBackground) return undefined;
+    try {
+      const canvas = renderEditedCanvas(image, imageEdits);
+      return canvas.toDataURL("image/png");
+    } catch (error) {
+      console.error("Preview render failed:", error);
+      return undefined;
+    }
+  }, [image, imageEdits]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-zinc-950 text-zinc-100 overflow-hidden font-sans select-none">
@@ -195,18 +284,35 @@ export default function Home() {
       {/* Main Container */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Tool Palette */}
-        <aside className="w-14 border-r border-zinc-800 bg-zinc-900/80 flex flex-col items-center py-4 gap-4 shrink-0">
-          <div className={`p-2 rounded-lg transition-colors ${appMode === "UPLOAD" ? "bg-zinc-800 text-emerald-500" : "text-zinc-600"}`}>
+        <aside className="w-14 border-r border-zinc-800 bg-zinc-900/80 flex flex-col items-center py-4 gap-3 shrink-0">
+          <ToolButton label="Upload image" active={appMode === "UPLOAD"} onClick={handleReset}>
             <CloudArrowUp size={24} weight={appMode === "UPLOAD" ? "fill" : "regular"} />
-          </div>
-          <div className={`p-2 rounded-lg transition-colors ${appMode === "CROP" ? "bg-zinc-800 text-emerald-500" : "text-zinc-600"}`}>
+          </ToolButton>
+          <ToolButton label="Crop sheet" active={appMode === "CROP"} disabled={!originalImage} onClick={() => setAppMode("CROP")}>
             <Crop size={24} weight={appMode === "CROP" ? "fill" : "regular"} />
-          </div>
-          <div className={`p-2 rounded-lg transition-colors ${appMode === "SLICE" ? "bg-zinc-800 text-emerald-500" : "text-zinc-600"}`}>
-            <GridFour size={24} weight={appMode === "SLICE" ? "fill" : "regular"} />
-          </div>
-          <div className="mt-auto p-2 text-zinc-700">
-            <Files size={24} />
+          </ToolButton>
+          <ToolButton label="Slice grid" active={appMode === "SLICE" && activeTool === "GRID"} disabled={!image} onClick={() => { setAppMode("SLICE"); setActiveTool("GRID"); }}>
+            <GridFour size={24} weight={appMode === "SLICE" && activeTool === "GRID" ? "fill" : "regular"} />
+          </ToolButton>
+          <ToolButton label="Remove background" active={appMode === "SLICE" && activeTool === "BACKGROUND"} disabled={!image} onClick={() => { setAppMode("SLICE"); setActiveTool("BACKGROUND"); }}>
+            <Eraser size={24} weight={appMode === "SLICE" && activeTool === "BACKGROUND" ? "fill" : "regular"} />
+          </ToolButton>
+          <ToolButton label="Hue editor" active={appMode === "SLICE" && activeTool === "HUE"} disabled={!image} onClick={() => { setAppMode("SLICE"); setActiveTool("HUE"); }}>
+            <Palette size={24} weight={appMode === "SLICE" && activeTool === "HUE" ? "fill" : "regular"} />
+          </ToolButton>
+          <ToolButton label="Effects" active={appMode === "SLICE" && activeTool === "EFFECTS"} disabled={!image} onClick={() => { setAppMode("SLICE"); setActiveTool("EFFECTS"); }}>
+            <SlidersHorizontal size={24} weight={appMode === "SLICE" && activeTool === "EFFECTS" ? "fill" : "regular"} />
+          </ToolButton>
+          <div className="mt-auto flex flex-col gap-3">
+            <ToolButton label="Export edited sheet" disabled={!image || isProcessing} onClick={handleDownloadEditedImage}>
+              <DownloadSimple size={24} />
+            </ToolButton>
+            <ToolButton label="Reset edits" disabled={!image || !hasVisualEdits(imageEdits)} onClick={resetImageEdits}>
+              <ArrowCounterClockwise size={24} />
+            </ToolButton>
+            <div className="p-2 text-zinc-700" title="Sliced files">
+              <Files size={24} />
+            </div>
           </div>
         </aside>
 
@@ -254,6 +360,8 @@ export default function Home() {
               >
                 <Workspace
                   image={image}
+                  previewSrc={backgroundPreviewSrc}
+                  imageFilter={imageEdits.removeBackground ? "none" : buildImageFilter(imageEdits)}
                   vLines={vLines}
                   hLines={hLines}
                   onUpdateVLines={setVLines}
@@ -281,6 +389,11 @@ export default function Home() {
           onZoomIn={() => setZoom(prev => Math.min(prev + 0.1, 3))}
           onZoomOut={() => setZoom(prev => Math.max(prev - 0.1, 0.1))}
           onZoomFit={handleZoomFit}
+          activeTool={activeTool}
+          imageEdits={imageEdits}
+          onUpdateImageEdits={updateImageEdits}
+          onResetImageEdits={resetImageEdits}
+          onDownloadEditedImage={handleDownloadEditedImage}
         />
       </div>
 

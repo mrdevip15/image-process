@@ -5,6 +5,8 @@ import { Trash } from "@phosphor-icons/react";
 
 interface WorkspaceProps {
   image: HTMLImageElement;
+  previewSrc?: string;
+  imageFilter?: string;
   vLines: number[]; // percentages (0-100)
   hLines: number[]; // percentages (0-100)
   onUpdateVLines: (lines: number[]) => void;
@@ -14,6 +16,8 @@ interface WorkspaceProps {
 
 export function Workspace({
   image,
+  previewSrc,
+  imageFilter = "none",
   vLines,
   hLines,
   onUpdateVLines,
@@ -82,9 +86,9 @@ export function Workspace({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img 
-          src={image.src} 
+          src={previewSrc || image.src} 
           alt="To be sliced" 
-          style={{ width: '100%', height: '100%' }}
+          style={{ width: '100%', height: '100%', filter: imageFilter }}
           className="block pointer-events-none select-none opacity-90"
         />
 
