@@ -13,6 +13,8 @@ import {
   canvasToImage,
   defaultImageEdits,
   hasVisualEdits,
+  imageSourceToBlob,
+  loadImageFromSrc,
   renderEditedCanvas,
 } from "@/lib/imageEdits";
 import JSZip from "jszip";
@@ -40,6 +42,7 @@ interface EditorSnapshot {
   vLines: number[];
   hLines: number[];
   imageEdits: ImageEdits;
+  backgroundRemovedSrc?: string;
 }
 
 interface ToolButtonProps {
@@ -79,6 +82,8 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTool, setActiveTool] = useState<ActiveTool>("GRID");
   const [imageEdits, setImageEdits] = useState<ImageEdits>(defaultImageEdits);
+  const [backgroundRemovedSrc, setBackgroundRemovedSrc] = useState<string | undefined>();
+  const [isRemovingBackground, setIsRemovingBackground] = useState(false);
   const [undoStack, setUndoStack] = useState<EditorSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<EditorSnapshot[]>([]);
   
@@ -116,7 +121,8 @@ export default function Home() {
     vLines: [...vLines],
     hLines: [...hLines],
     imageEdits: { ...imageEdits },
-  }), [hLines, imageEdits, vLines]);
+    backgroundRemovedSrc,
+  }), [backgroundRemovedSrc, hLines, imageEdits, vLines]);
 
   const rememberCurrentState = useCallback(() => {
     const snapshot = createSnapshot();
@@ -128,6 +134,7 @@ export default function Home() {
     setVLines(snapshot.vLines);
     setHLines(snapshot.hLines);
     setImageEdits(snapshot.imageEdits);
+    setBackgroundRemovedSrc(snapshot.backgroundRemovedSrc);
   };
 
   const handleUndo = () => {
@@ -150,6 +157,7 @@ export default function Home() {
     setOriginalImage(img);
     setImage(null);
     setImageEdits(defaultImageEdits);
+    setBackgroundRemovedSrc(undefined);
     setUndoStack([]);
     setRedoStack([]);
     setActiveTool("GRID");
@@ -216,8 +224,8 @@ export default function Home() {
     setIsProcessing(true);
     try {
       const exportImage = hasVisualEdits(imageEdits)
-        ? await canvasToImage(renderEditedCanvas(image, imageEdits))
-        : image;
+        ? await canvasToImage(renderEditedCanvas(await getCurrentImageSource(), imageEdits))
+        : await getCurrentImageSource();
       const vPixels = vLines.map((p) => (p / 100) * image.naturalWidth);
       const hPixels = hLines.map((p) => (p / 100) * image.naturalHeight);
       const slices = await sliceImage(exportImage, vPixels, hPixels);
@@ -237,7 +245,7 @@ export default function Home() {
     if (!image) return;
     setIsProcessing(true);
     try {
-      const canvas = renderEditedCanvas(image, imageEdits);
+      const canvas = renderEditedCanvas(await getCurrentImageSource(), imageEdits);
       const blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob((b) => resolve(b), "image/png")
       );
@@ -261,6 +269,7 @@ export default function Home() {
     setZoom(1);
     setActiveTool("GRID");
     setImageEdits(defaultImageEdits);
+    setBackgroundRemovedSrc(undefined);
     setUndoStack([]);
     setRedoStack([]);
   };
@@ -273,6 +282,49 @@ export default function Home() {
   const resetImageEdits = () => {
     rememberCurrentState();
     setImageEdits(defaultImageEdits);
+    setBackgroundRemovedSrc(undefined);
+  };
+
+  const getCurrentImageSource = async () => {
+    if (!image) throw new Error("No image loaded.");
+    if (imageEdits.removeBackground && backgroundRemovedSrc) {
+      return loadImageFromSrc(backgroundRemovedSrc);
+    }
+    return image;
+  };
+
+  const applyRembgBackgroundRemoval = async () => {
+    if (!image) return;
+    rememberCurrentState();
+    setIsRemovingBackground(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", await imageSourceToBlob(image.src), "input.png");
+      formData.append("model", "isnet-general-use");
+
+      const response = await fetch("/api/remove-background", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => undefined);
+        throw new Error(details?.error || "Failed to remove background with rembg.");
+      }
+
+      const blob = await response.blob();
+      setBackgroundRemovedSrc(URL.createObjectURL(blob));
+      setImageEdits((current) => ({ ...current, removeBackground: true }));
+    } catch (error) {
+      setUndoStack((current) => current.slice(0, -1));
+      const message = error instanceof Error ? error.message : "Failed to remove background.";
+      console.log("rembg background removal failed", {
+        message,
+        installHint: 'Install rembg locally with: pip install "rembg[cpu,cli]"',
+      });
+    } finally {
+      setIsRemovingBackground(false);
+    }
   };
 
   const updateVLines = (lines: number[]) => {
@@ -307,15 +359,9 @@ export default function Home() {
   }, [appMode, handleZoomFit]);
 
   const backgroundPreviewSrc = useMemo(() => {
-    if (!image || !imageEdits.removeBackground) return undefined;
-    try {
-      const canvas = renderEditedCanvas(image, imageEdits);
-      return canvas.toDataURL("image/png");
-    } catch (error) {
-      console.error("Preview render failed:", error);
-      return undefined;
-    }
-  }, [image, imageEdits]);
+    if (!imageEdits.removeBackground) return undefined;
+    return backgroundRemovedSrc;
+  }, [backgroundRemovedSrc, imageEdits.removeBackground]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-zinc-950 text-zinc-100 overflow-hidden font-sans select-none">
@@ -487,6 +533,9 @@ export default function Home() {
           imageEdits={imageEdits}
           onUpdateImageEdits={updateImageEdits}
           onResetImageEdits={resetImageEdits}
+          onApplyBackgroundRemoval={applyRembgBackgroundRemoval}
+          isRemovingBackground={isRemovingBackground}
+          hasBackgroundRemovedImage={Boolean(backgroundRemovedSrc)}
           onDownloadEditedImage={handleDownloadEditedImage}
         />
       </div>

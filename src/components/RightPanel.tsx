@@ -18,6 +18,7 @@ import {
   CircleHalf,
   DropHalf,
   ImageSquare,
+  Sparkle,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { ActiveTool, ImageEdits, hasVisualEdits } from "@/lib/imageEdits";
@@ -41,6 +42,9 @@ interface RightPanelProps {
   imageEdits: ImageEdits;
   onUpdateImageEdits: (edits: Partial<ImageEdits>) => void;
   onResetImageEdits: () => void;
+  onApplyBackgroundRemoval: () => void;
+  isRemovingBackground: boolean;
+  hasBackgroundRemovedImage: boolean;
   onDownloadEditedImage: () => void;
 }
 
@@ -101,6 +105,9 @@ export function RightPanel({
   imageEdits,
   onUpdateImageEdits,
   onResetImageEdits,
+  onApplyBackgroundRemoval,
+  isRemovingBackground,
+  hasBackgroundRemovedImage,
   onDownloadEditedImage
 }: RightPanelProps) {
   const [gridConfig, setGridConfig] = useState({ rows: 4, cols: 4 });
@@ -241,29 +248,36 @@ export function RightPanel({
               <div className="space-y-4">
                 <GridIconLabel icon={<Eraser size={14} />} label="Remove Background" />
                 <p className="text-xs text-zinc-400 leading-relaxed bg-zinc-950 p-3 rounded border border-zinc-800">
-                  Removes pixels similar to the four image corners. Best for flat white, black, or solid-color icon sheets.
+                  Uses rembg AI segmentation for cleaner cutouts than color matching. First run may take longer while the model loads.
                 </p>
                 <button
-                  onClick={() => onUpdateImageEdits({ removeBackground: !imageEdits.removeBackground })}
-                  title="Toggle background removal"
+                  onClick={onApplyBackgroundRemoval}
+                  disabled={isRemovingBackground}
+                  title="Remove background with rembg"
                   className={cn(
                     "w-full flex items-center justify-center gap-2 py-3 rounded font-bold text-sm transition-colors",
-                    imageEdits.removeBackground
-                      ? "bg-emerald-600 text-white hover:bg-emerald-500"
-                      : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                    isRemovingBackground
+                      ? "bg-zinc-800 text-zinc-500 cursor-wait"
+                      : "bg-emerald-600 text-white hover:bg-emerald-500"
                   )}
                 >
-                  <Eraser size={18} weight="bold" />
-                  {imageEdits.removeBackground ? "Background Removed" : "Remove Background"}
+                  {isRemovingBackground ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Sparkle size={18} weight="bold" />
+                  )}
+                  {isRemovingBackground ? "Running rembg..." : hasBackgroundRemovedImage ? "Run rembg Again" : "Remove with rembg"}
                 </button>
-                <SliderControl
-                  label="Tolerance"
-                  value={imageEdits.backgroundTolerance}
-                  min={1}
-                  max={100}
-                  unit="%"
-                  onChange={(value) => onUpdateImageEdits({ backgroundTolerance: value })}
-                />
+                {hasBackgroundRemovedImage && (
+                  <button
+                    onClick={() => onUpdateImageEdits({ removeBackground: !imageEdits.removeBackground })}
+                    title="Show or hide the rembg result"
+                    className="w-full flex items-center justify-center gap-2 py-2 rounded border border-zinc-800 hover:bg-zinc-800 text-[11px] font-bold transition-colors"
+                  >
+                    <Eraser size={14} />
+                    {imageEdits.removeBackground ? "Hide Removed Background" : "Show Removed Background"}
+                  </button>
+                )}
               </div>
             )}
 

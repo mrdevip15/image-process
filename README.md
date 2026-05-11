@@ -2,6 +2,20 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+Background removal uses the local [`rembg`](https://github.com/danielgatis/rembg) Python library from the Next.js API route. Install it before using the “Remove with rembg” button:
+
+```bash
+python3 -m pip install "rembg[cpu,cli]"
+```
+
+If your Python binary is not the default `python3`, run Next with:
+
+```bash
+REMBG_PYTHON_BIN=/path/to/python3 npm run dev
+```
+
+`rembg` downloads its model to `~/.u2net/` on first use, so the first background removal can take longer.
+
 First, run the development server:
 
 ```bash
