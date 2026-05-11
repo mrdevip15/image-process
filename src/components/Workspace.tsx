@@ -9,6 +9,7 @@ interface WorkspaceProps {
   hLines: number[]; // percentages (0-100)
   onUpdateVLines: (lines: number[]) => void;
   onUpdateHLines: (lines: number[]) => void;
+  zoom: number;
 }
 
 export function Workspace({
@@ -17,6 +18,7 @@ export function Workspace({
   hLines,
   onUpdateVLines,
   onUpdateHLines,
+  zoom
 }: WorkspaceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -33,15 +35,16 @@ export function Workspace({
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       
+      // Calculate position relative to the container, considering the CSS scale
       if (type === "v") {
-        const newX = moveEvent.clientX - rect.left;
-        const newPercent = Math.max(0, Math.min(100, (newX / rect.width) * 100));
+        const newX = (moveEvent.clientX - rect.left) / zoom;
+        const newPercent = Math.max(0, Math.min(100, (newX / (rect.width / zoom)) * 100));
         const newLines = [...vLines];
         newLines[index] = newPercent;
         onUpdateVLines(newLines);
       } else {
-        const newY = moveEvent.clientY - rect.top;
-        const newPercent = Math.max(0, Math.min(100, (newY / rect.height) * 100));
+        const newY = (moveEvent.clientY - rect.top) / zoom;
+        const newPercent = Math.max(0, Math.min(100, (newY / (rect.height / zoom)) * 100));
         const newLines = [...hLines];
         newLines[index] = newPercent;
         onUpdateHLines(newLines);
@@ -70,10 +73,11 @@ export function Workspace({
     <div className="flex items-center justify-center w-full h-full p-8 overflow-auto checkerboard">
       <div 
         ref={containerRef}
-        className="relative bg-zinc-950 shadow-2xl ring-1 ring-white/10"
+        className="relative bg-zinc-950 shadow-2xl ring-1 ring-white/10 transition-transform duration-200 ease-out origin-center"
         style={{
           width: "fit-content",
           height: "fit-content",
+          transform: `scale(${zoom})`
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}

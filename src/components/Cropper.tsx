@@ -9,9 +9,10 @@ interface CropperProps {
   setCrop: (crop: Crop) => void;
   setCompletedCrop: (crop: PixelCrop) => void;
   imgRef: React.RefObject<HTMLImageElement | null>;
+  zoom: number;
 }
 
-export function Cropper({ image, crop, setCrop, setCompletedCrop, imgRef }: CropperProps) {
+export function Cropper({ image, crop, setCrop, setCompletedCrop, imgRef, zoom }: CropperProps) {
   const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { width, height } = e.currentTarget;
     const initialCrop = centerCrop(
@@ -24,7 +25,10 @@ export function Cropper({ image, crop, setCrop, setCompletedCrop, imgRef }: Crop
 
   return (
     <div className="flex items-center justify-center w-full h-full p-8 overflow-auto checkerboard">
-      <div className="shadow-2xl ring-1 ring-white/10">
+      <div 
+        className="shadow-2xl ring-1 ring-white/10 transition-transform duration-200 ease-out origin-center"
+        style={{ transform: `scale(${zoom})` }}
+      >
         <ReactCrop
           crop={crop}
           onChange={(c) => setCrop(c)}

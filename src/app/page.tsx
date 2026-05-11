@@ -27,6 +27,9 @@ export default function Home() {
   const [vLines, setVLines] = useState<number[]>([]); // percentages
   const [hLines, setHLines] = useState<number[]>([]); // percentages
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Canvas State (Zoom)
+  const [zoom, setZoom] = useState(1);
 
   // Crop State moved here for sidebar access
   const [crop, setCrop] = useState<CropState>();
@@ -36,6 +39,7 @@ export default function Home() {
   const handleUpload = (img: HTMLImageElement) => {
     setOriginalImage(img);
     setAppMode("CROP");
+    setZoom(1);
   };
 
   const handleConfirmCrop = async () => {
@@ -67,6 +71,7 @@ export default function Home() {
     croppedImg.onload = () => {
       setImage(croppedImg);
       setAppMode("SLICE");
+      setZoom(1);
       generateGrid(4, 4);
     };
     croppedImg.src = canvas.toDataURL("image/png");
@@ -112,6 +117,7 @@ export default function Home() {
     setHLines([]);
     setCrop(undefined);
     setCompletedCrop(undefined);
+    setZoom(1);
   };
 
   return (
@@ -196,6 +202,7 @@ export default function Home() {
                   setCrop={setCrop}
                   setCompletedCrop={setCompletedCrop}
                   imgRef={imgRef}
+                  zoom={zoom}
                 />
               </motion.div>
             )}
@@ -214,6 +221,7 @@ export default function Home() {
                   hLines={hLines}
                   onUpdateVLines={setVLines}
                   onUpdateHLines={setHLines}
+                  zoom={zoom}
                 />
               </motion.div>
             )}
@@ -232,6 +240,10 @@ export default function Home() {
           isProcessing={isProcessing}
           imageDimensions={image ? { width: image.naturalWidth, height: image.naturalHeight } : undefined}
           gridCount={{ v: vLines.length, h: hLines.length }}
+          zoom={zoom}
+          onZoomIn={() => setZoom(prev => Math.min(prev + 0.1, 3))}
+          onZoomOut={() => setZoom(prev => Math.max(prev - 0.1, 0.1))}
+          onZoomFit={() => setZoom(1)}
         />
       </div>
 

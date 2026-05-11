@@ -8,7 +8,10 @@ import {
   PlusCircle, 
   ArrowCounterClockwise,
   CheckCircle,
-  Info
+  Info,
+  MagnifyingGlassPlus,
+  MagnifyingGlassMinus,
+  ArrowsIn
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +26,10 @@ interface RightPanelProps {
   isProcessing: boolean;
   imageDimensions?: { width: number; height: number };
   gridCount?: { v: number; h: number };
+  zoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onZoomFit: () => void;
 }
 
 export function RightPanel({
@@ -36,17 +43,52 @@ export function RightPanel({
   isProcessing,
   imageDimensions,
   gridCount,
+  zoom,
+  onZoomIn,
+  onZoomOut,
+  onZoomFit
 }: RightPanelProps) {
   const [gridConfig, setGridConfig] = useState({ rows: 4, cols: 4 });
 
   return (
-    <aside className="w-72 border-l border-zinc-800 bg-zinc-900/50 flex flex-col overflow-y-auto">
+    <aside className="w-72 border-l border-zinc-800 bg-zinc-900/50 flex flex-col overflow-y-auto shrink-0">
       <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
         <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500">Properties</h2>
         <Info size={14} className="text-zinc-600" />
       </div>
 
       <div className="flex-1">
+        {/* Navigation & Canvas Controls (Always visible if image exists) */}
+        {(mode === "CROP" || mode === "SLICE") && (
+          <div className="p-4 space-y-4">
+            <label className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Canvas View</label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={onZoomOut}
+                className="flex flex-col items-center gap-1.5 py-2 rounded bg-zinc-800 hover:bg-zinc-700 transition-colors border border-zinc-700/50"
+              >
+                <MagnifyingGlassMinus size={16} />
+                <span className="text-[9px] font-bold">OUT</span>
+              </button>
+              <button
+                onClick={onZoomFit}
+                className="flex flex-col items-center gap-1.5 py-2 rounded bg-zinc-800 hover:bg-zinc-700 transition-colors border border-zinc-700/50"
+              >
+                <ArrowsIn size={16} />
+                <span className="text-[9px] font-bold uppercase">{Math.round(zoom * 100)}%</span>
+              </button>
+              <button
+                onClick={onZoomIn}
+                className="flex flex-col items-center gap-1.5 py-2 rounded bg-zinc-800 hover:bg-zinc-700 transition-colors border border-zinc-700/50"
+              >
+                <MagnifyingGlassPlus size={16} />
+                <span className="text-[9px] font-bold">IN</span>
+              </button>
+            </div>
+            <div className="h-px bg-zinc-800" />
+          </div>
+        )}
+
         {mode === "UPLOAD" && (
           <div className="p-6 text-center">
             <p className="text-sm text-zinc-500 italic">Upload an image to see properties</p>
@@ -54,7 +96,7 @@ export function RightPanel({
         )}
 
         {mode === "CROP" && (
-          <div className="p-4 space-y-6">
+          <div className="p-4 pt-0 space-y-6">
             <div className="space-y-2">
               <label className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Instructions</label>
               <p className="text-xs text-zinc-400 leading-relaxed bg-zinc-950 p-3 rounded border border-zinc-800">
@@ -73,7 +115,7 @@ export function RightPanel({
         )}
 
         {mode === "SLICE" && (
-          <div className="p-4 space-y-6">
+          <div className="p-4 pt-0 space-y-6">
             <div className="space-y-4">
               <label className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Grid Generator</label>
               <div className="grid grid-cols-2 gap-3">
@@ -154,7 +196,7 @@ export function RightPanel({
         )}
       </div>
 
-      <div className="p-4 border-t border-zinc-800 space-y-3 bg-zinc-900">
+      <div className="p-4 border-t border-zinc-800 space-y-3 bg-zinc-900 shrink-0">
         <button
           onClick={onDownload}
           disabled={isProcessing || mode !== "SLICE"}
