@@ -1,4 +1,5 @@
 export type SelectionMode = "freehand" | "pen" | "smart";
+export type SelectionAction = "new" | "add" | "subtract";
 
 export interface SelectionPoint {
   x: number;
@@ -40,6 +41,7 @@ export function clampPoint(point: SelectionPoint, width: number, height: number)
 export async function loadImageForCanvas(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
+    img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = src;
@@ -60,6 +62,64 @@ function drawPolygonMask(
   points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
   ctx.closePath();
   ctx.fill();
+}
+
+export function pointsToMask(
+  points: SelectionPoint[],
+  width: number,
+  height: number
+): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  if (points.length > 0) {
+    ctx.moveTo(points[0].x, points[0].y);
+    points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.closePath();
+    ctx.fill();
+  }
+  
+  return canvas.toDataURL("image/png");
+}
+
+export async function combineMasks(
+  baseMaskUrl: string | undefined,
+  newMaskUrl: string,
+  action: SelectionAction,
+  width: number,
+  height: number
+): Promise<string> {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not create mask canvas context.");
+
+  if (baseMaskUrl && action !== "new") {
+    const baseMask = await loadImageForCanvas(baseMaskUrl);
+    ctx.drawImage(baseMask, 0, 0);
+  }
+
+  const newMask = await loadImageForCanvas(newMaskUrl);
+  
+  if (action === "add") {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(newMask, 0, 0);
+  } else if (action === "subtract") {
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.drawImage(newMask, 0, 0);
+  } else {
+    // For "new" or if no base, just draw the new one
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(newMask, 0, 0);
+  }
+
+  return canvas.toDataURL("image/png");
 }
 
 export async function applySelectionMaskToImage(

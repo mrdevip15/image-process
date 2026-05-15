@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import { Trash } from "@phosphor-icons/react";
 import { ActiveTool } from "@/lib/imageEdits";
-import { ImageSelection, SelectionMode, SelectionPoint, clampPoint, distance, pointsToPath } from "@/lib/selection";
+import { ImageSelection, SelectionAction, SelectionMode, SelectionPoint, clampPoint, distance, pointsToPath } from "@/lib/selection";
 
 interface WorkspaceProps {
   image: HTMLImageElement;
@@ -16,6 +16,7 @@ interface WorkspaceProps {
   zoom: number;
   activeTool: ActiveTool;
   selectionMode: SelectionMode;
+  onSelectionActionChange: (action: SelectionAction) => void;
   selection?: ImageSelection;
   onSelectionChange: (selection?: ImageSelection) => void;
   onSmartSelect: (point: SelectionPoint) => void;
@@ -32,12 +33,42 @@ export function Workspace({
   zoom,
   activeTool,
   selectionMode,
+  onSelectionActionChange,
   selection,
   onSelectionChange,
   onSmartSelect,
 }: WorkspaceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const freehandPointsRef = useRef<SelectionPoint[]>([]);
+
+  // Keyboard shortcuts for Add/Subtract
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (activeTool !== "LASSO") return;
+      
+      if (e.key === "Shift") {
+        onSelectionActionChange("add");
+      }
+      if (e.key === "Alt") {
+        e.preventDefault();
+        onSelectionActionChange("subtract");
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (activeTool !== "LASSO") return;
+      if (e.key === "Shift" || e.key === "Alt") {
+        onSelectionActionChange("new");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [activeTool, onSelectionActionChange]);
 
   const eventToImagePoint = (event: Pick<PointerEvent | React.PointerEvent, "clientX" | "clientY">) => {
     if (!containerRef.current) return { x: 0, y: 0 };
@@ -54,6 +85,11 @@ export function Workspace({
 
   const startLasso = (e: React.PointerEvent) => {
     if (activeTool !== "LASSO") return;
+
+    // Update action based on modifiers if not already set by keyboard listener
+    if (e.shiftKey) onSelectionActionChange("add");
+    else if (e.altKey) onSelectionActionChange("subtract");
+
     e.preventDefault();
     e.stopPropagation();
     const target = e.currentTarget as HTMLElement;
@@ -172,6 +208,20 @@ export function Workspace({
           style={{ width: '100%', height: '100%', filter: imageFilter }}
           className="block pointer-events-none select-none opacity-90"
         />
+
+        {activeTool === "LASSO" && selection?.maskDataUrl && (
+          <div 
+            className="absolute inset-0 z-10 pointer-events-none opacity-50 overflow-hidden"
+            style={{ width: '100%', height: '100%' }}
+          >
+            <img 
+              src={selection.maskDataUrl} 
+              alt="" 
+              className="w-full h-full object-fill grayscale invert brightness-200"
+              style={{ mixBlendMode: 'screen', filter: 'drop-shadow(0 0 1px #10b981)' }}
+            />
+          </div>
+        )}
 
         {activeTool === "LASSO" && selection && selection.points.length > 0 && (
           <svg

@@ -19,12 +19,15 @@ import {
 } from "@/lib/imageEdits";
 import {
   ImageSelection,
+  SelectionAction,
   SelectionMode,
   SelectionPoint,
   applySelectionMaskToImage,
+  combineMasks,
   createSmartSelection,
   defaultSelectionMode,
   defaultSmartTolerance,
+  pointsToMask,
 } from "@/lib/selection";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
@@ -54,6 +57,7 @@ interface EditorSnapshot {
   backgroundRemovedSrc?: string;
   selection?: ImageSelection;
   selectionMode: SelectionMode;
+  selectionAction: SelectionAction;
   smartTolerance: number;
 }
 
@@ -114,6 +118,7 @@ export default function Home() {
   const [isRemovingBackground, setIsRemovingBackground] = useState(false);
   const [selection, setSelection] = useState<ImageSelection | undefined>();
   const [selectionMode, setSelectionMode] = useState<SelectionMode>(defaultSelectionMode);
+  const [selectionAction, setSelectionAction] = useState<SelectionAction>("new");
   const [smartTolerance, setSmartTolerance] = useState(defaultSmartTolerance);
   const [undoStack, setUndoStack] = useState<EditorSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<EditorSnapshot[]>([]);
@@ -155,8 +160,9 @@ export default function Home() {
     backgroundRemovedSrc,
     selection: selection ? { ...selection, points: [...selection.points] } : undefined,
     selectionMode,
+    selectionAction,
     smartTolerance,
-  }), [backgroundRemovedSrc, hLines, imageEdits, selection, selectionMode, smartTolerance, vLines]);
+  }), [backgroundRemovedSrc, hLines, imageEdits, selection, selectionMode, selectionAction, smartTolerance, vLines]);
 
   const rememberCurrentState = useCallback(() => {
     const snapshot = createSnapshot();
@@ -171,6 +177,7 @@ export default function Home() {
     setBackgroundRemovedSrc(snapshot.backgroundRemovedSrc);
     setSelection(snapshot.selection);
     setSelectionMode(snapshot.selectionMode);
+    setSelectionAction(snapshot.selectionAction);
     setSmartTolerance(snapshot.smartTolerance);
   };
 
@@ -197,6 +204,7 @@ export default function Home() {
     setBackgroundRemovedSrc(undefined);
     setSelection(undefined);
     setSelectionMode(defaultSelectionMode);
+    setSelectionAction("new");
     setSmartTolerance(defaultSmartTolerance);
     setUndoStack([]);
     setRedoStack([]);
@@ -313,6 +321,7 @@ export default function Home() {
     setBackgroundRemovedSrc(undefined);
     setSelection(undefined);
     setSelectionMode(defaultSelectionMode);
+    setSelectionAction("new");
     setSmartTolerance(defaultSmartTolerance);
     setUndoStack([]);
     setRedoStack([]);
@@ -393,12 +402,47 @@ export default function Home() {
         image.naturalHeight,
         smartTolerance
       );
+      
+      const combinedMaskUrl = await combineMasks(
+        selection?.maskDataUrl,
+        nextSelection.maskDataUrl!,
+        selectionAction,
+        image.naturalWidth,
+        image.naturalHeight
+      );
+
       rememberCurrentState();
-      setSelection(nextSelection);
+      setSelection({
+        ...nextSelection,
+        maskDataUrl: combinedMaskUrl,
+      });
     } catch (error) {
       console.error("Smart lasso failed:", error);
       alert("Smart lasso could not read this image.");
     }
+  };
+
+  const handleSelectionChange = async (nextSelection?: ImageSelection) => {
+    if (nextSelection?.closed && (nextSelection.mode === "freehand" || nextSelection.mode === "pen")) {
+      if (!image) return;
+      const newMaskUrl = pointsToMask(nextSelection.points, image.naturalWidth, image.naturalHeight);
+      const combinedMaskUrl = await combineMasks(
+        selection?.maskDataUrl,
+        newMaskUrl,
+        selectionAction,
+        image.naturalWidth,
+        image.naturalHeight
+      );
+      
+      rememberCurrentState();
+      setSelection({
+        ...nextSelection,
+        maskDataUrl: combinedMaskUrl,
+        points: [], // Clear active points as they are now merged into the mask
+      });
+      return;
+    }
+    setSelection(nextSelection);
   };
 
   const applySelectionAsMask = async () => {
@@ -606,8 +650,9 @@ export default function Home() {
                   zoom={zoom}
                   activeTool={activeTool}
                   selectionMode={selectionMode}
+                  onSelectionActionChange={setSelectionAction}
                   selection={selection}
-                  onSelectionChange={setSelection}
+                  onSelectionChange={handleSelectionChange}
                   onSmartSelect={handleSmartSelect}
                 />
               </motion.div>
@@ -641,9 +686,11 @@ export default function Home() {
           onDownloadEditedImage={handleDownloadEditedImage}
           selectionMode={selectionMode}
           onSelectionModeChange={updateSelectionMode}
+          selectionAction={selectionAction}
+          onSelectionActionChange={setSelectionAction}
           smartTolerance={smartTolerance}
           onSmartToleranceChange={setSmartTolerance}
-          hasSelection={Boolean(selection?.closed)}
+          hasSelection={Boolean(selection?.maskDataUrl || selection?.closed)}
           onApplySelectionMask={applySelectionAsMask}
           onClearSelection={clearSelection}
         />

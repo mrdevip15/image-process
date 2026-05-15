@@ -19,10 +19,13 @@ import {
   DropHalf,
   ImageSquare,
   Sparkle,
+  Plus,
+  Minus,
+  Selection,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { ActiveTool, ImageEdits, hasVisualEdits } from "@/lib/imageEdits";
-import { SelectionMode } from "@/lib/selection";
+import { SelectionAction, SelectionMode } from "@/lib/selection";
 
 interface RightPanelProps {
   mode: "UPLOAD" | "CROP" | "SLICE";
@@ -49,6 +52,8 @@ interface RightPanelProps {
   onDownloadEditedImage: () => void;
   selectionMode: SelectionMode;
   onSelectionModeChange: (mode: SelectionMode) => void;
+  selectionAction: SelectionAction;
+  onSelectionActionChange: (action: SelectionAction) => void;
   smartTolerance: number;
   onSmartToleranceChange: (value: number) => void;
   hasSelection: boolean;
@@ -119,6 +124,8 @@ export function RightPanel({
   onDownloadEditedImage,
   selectionMode,
   onSelectionModeChange,
+  selectionAction,
+  onSelectionActionChange,
   smartTolerance,
   onSmartToleranceChange,
   hasSelection,
@@ -303,25 +310,72 @@ export function RightPanel({
                   Select the part to keep, then apply it as a transparent mask. Smart picks a connected area by color; Manual drags freely; Pen places precise points.
                 </p>
 
-                <div className="grid grid-cols-3 gap-2">
-                  {([
-                    ["smart", "Smart"],
-                    ["freehand", "Manual"],
-                    ["pen", "Pen"],
-                  ] as const).map(([modeKey, label]) => (
+                <div className="space-y-3">
+                  <label className="text-[9px] font-bold uppercase text-zinc-600 tracking-widest">Tool Mode</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      ["smart", "Smart"],
+                      ["freehand", "Manual"],
+                      ["pen", "Pen"],
+                    ] as const).map(([modeKey, label]) => (
+                      <button
+                        key={modeKey}
+                        onClick={() => onSelectionModeChange(modeKey)}
+                        className={cn(
+                          "rounded border py-2 text-[10px] font-bold uppercase tracking-wider transition-colors",
+                          selectionMode === modeKey
+                            ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
+                            : "border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-[9px] font-bold uppercase text-zinc-600 tracking-widest">Operation</label>
+                  <div className="grid grid-cols-3 gap-2">
                     <button
-                      key={modeKey}
-                      onClick={() => onSelectionModeChange(modeKey)}
+                      onClick={() => onSelectionActionChange("new")}
                       className={cn(
-                        "rounded border py-2 text-[10px] font-bold uppercase tracking-wider transition-colors",
-                        selectionMode === modeKey
+                        "flex flex-col items-center gap-1.5 py-2 rounded border transition-colors",
+                        selectionAction === "new"
                           ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
-                          : "border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                          : "border-zinc-800 text-zinc-500 hover:bg-zinc-800"
                       )}
                     >
-                      {label}
+                      <Selection size={14} />
+                      <span className="text-[9px] font-bold uppercase">New</span>
                     </button>
-                  ))}
+                    <button
+                      onClick={() => onSelectionActionChange("add")}
+                      title="Add to selection (Hold Shift)"
+                      className={cn(
+                        "flex flex-col items-center gap-1.5 py-2 rounded border transition-colors",
+                        selectionAction === "add"
+                          ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
+                          : "border-zinc-800 text-zinc-500 hover:bg-zinc-800"
+                      )}
+                    >
+                      <Plus size={14} />
+                      <span className="text-[9px] font-bold uppercase">Add</span>
+                    </button>
+                    <button
+                      onClick={() => onSelectionActionChange("subtract")}
+                      title="Subtract from selection (Hold Alt)"
+                      className={cn(
+                        "flex flex-col items-center gap-1.5 py-2 rounded border transition-colors",
+                        selectionAction === "subtract"
+                          ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
+                          : "border-zinc-800 text-zinc-500 hover:bg-zinc-800"
+                      )}
+                    >
+                      <Minus size={14} />
+                      <span className="text-[9px] font-bold uppercase">Sub</span>
+                    </button>
+                  </div>
                 </div>
 
                 {selectionMode === "smart" && (
